@@ -11,9 +11,9 @@ namespace warehouse_parking
     {
         // 静态变量
         /// <summary>
-        /// 车辆到达率
+        /// 车辆到达时间间隔
         /// </summary>
-        public double ArrivalRate { get; set; }
+        public double ArrivalInterval { get; set; }
 
         /// <summary>
         /// 路径处理时间下限
@@ -41,162 +41,153 @@ namespace warehouse_parking
         public int WarehouseCapacity { get; set; }
 
         /// <summary>
-        /// 路径服务率
+        /// 仓库服务时长
         /// </summary>
-        public double PathServiceRate { get; set; }
-
-        /// <summary>
-        /// 仓库服务率
-        /// </summary>
-        public double WarehouseServiceRate { get; set; }
+        public double WarehouseServiceInterval { get; set; }
 
         // 动态变量
 
+        /// <summary>
+        /// 所有已到达的车
+        /// </summary>
+        public List<Car> CarsArrived { get; set; } = new List<Car>();
 
         /// <summary>
-        /// 仿真时间
+        /// 停车场中的车
         /// </summary>
-        public double SimulationClock {  get; set; }
+        public List<Car> CarsInParking { get; set; } = new List<Car>();
 
         /// <summary>
-        /// 车辆进入停车场的时间
+        /// 路径中的车
         /// </summary>
-        public List<double> ArrivalSeconds { get; set; }
+        public List<Car> CarsInPath {  get; set; } = new List<Car>();
 
         /// <summary>
-        /// 车辆等待时间
+        /// 仓库中的车
         /// </summary>
-        public List<double> WaitingSeconds { get; set; }
+        public List<Car> CarsInWarehouse { get; set; } = new List<Car>();
 
         /// <summary>
         /// 停车场中的顾客数量（区分是否空闲）
         /// </summary>
-        public int NumberInParking { get; set; }
+        public int NumberInParking { get { return CarsInParking.Count; } }
 
         /// <summary>
         /// 路径中的顾客数量（区分是否空闲）
         /// </summary>
-        public int NumberInPath { get; set; }
+        public int NumberInPath { get { return CarsInPath.Count; } }
 
         /// <summary>
         /// 仓库中的顾客数量（区分是否空闲）
         /// </summary>
-        public int NumberInWarehouse { get; set; }
-
-        /// <summary>
-        /// 车辆等待时间
-        /// </summary>
-        public int CarWaitingTime { get; set; }
-
-        /// <summary>
-        /// 已到达的车辆总数，用于计算平均服务时长
-        /// </summary>
-        public int totalCarArrived { get; set; }
+        public int NumberInWarehouse { get { return CarsInWarehouse.Count; } }
 
 
 
         // 事件
+
         /// <summary>
         /// 生成车辆
         /// </summary>
-        void Generate()
+        void Generate(Car car)
         {
             // 触发下一个事件：判断是否进入停车场，时钟更新：无
             if (NumberInParking < ParkingCapacity)
             {
                 // 停车场未满，进入，否则离开
-                Schedule(() => EnPark(), TimeSpan.Zero);
+                Schedule(() => EnPark(car), TimeSpan.Zero);
                 
             }
-            // 服务时长-分钟
-            double serviceMunites = O2DESNet.Distributions.Exponential.Sample(DefaultRS, ArrivalRate);
-            // 更新仿真时钟
-            SimulationClock += serviceMunites * 60;
+
             // 触发下一个生成器（等于循环），间隔时间是上面指定的到达率的指数分布
-            Schedule(() => Generate(), TimeSpan.FromMinutes(serviceMunites));
+            Schedule(() => Generate(new Car()), TimeSpan.FromMinutes(Exponential.Sample(DefaultRS, ArrivalInterval)));
+
         }
 
         /// <summary>
         /// 顾客进入停车场
         /// </summary>
-        void EnPark()
+        void EnPark(Car car)
         {
             // 停车场车辆数量+1
-            NumberInParking++;
+            CarsInParking.Add(car);
+            // 已到达车辆数量+1
+            CarsArrived.Add(car);
             // 记录车辆到达时间
-            ArrivalSeconds.Add(SimulationClock);
+            car.arrivalDateTime = ClockTime;
             // 触发下一个事件：尝试进入路径
-            Schedule(() => AttempEnPath(), TimeSpan.Zero);
+            Schedule(() => AttempEnPath(car), TimeSpan.Zero);
+
+            Console.WriteLine($"车{car.carId}进入停车场，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
         }
 
         /// <summary>
         /// 尝试进入路径
         /// </summary>
-        void AttempEnPath()
+        void AttempEnPath(Car car)
         {
             // 判断服务台是否空闲
-            if (NumberInWarehouse < WarehouseCapacity)
+            if (NumberInWarehouse < WarehouseCapacity && NumberInPath < PathCapacity)
             {
                 // 空闲，则进入路径
-                Schedule(() => EnPath(), TimeSpan.Zero);
+                Schedule(() => EnPath(car), TimeSpan.Zero);
             }
         }
 
         /// <summary>
         /// 进入路径
         /// </summary>
-        void EnPath()
+        void EnPath(Car car)
         {
-            // 路径人数加1
-            NumberInPath++;
             // 停车场人数-1
-            NumberInParking--;
+            CarsInParking.Remove(car);
+
+            // 路径人数加1
+            CarsInPath.Add(car);
+
             // 计算车辆等待时间
-            double ArrivalTime = ArrivalSeconds[0];
-            double WaitingTime = SimulationClock - ArrivalTime;
-            // 添加到list中存储
-            WaitingSeconds.Add(WaitingTime);
+            car.enterServerDateTime = ClockTime;
+            car.calWaitingTime();
 
-            //从队列中移除第一辆车
-            ArrivalSeconds.RemoveAt(0);
-
-            // 更新仿真时钟
-            double ServiceTime = Uniform.Sample(DefaultRS, PathLow, PathUp);
-            SimulationClock += ServiceTime * 60;
+            
             // 触发下一个事件：进入仓库
-            Schedule(() => EnWarehouse(), TimeSpan.FromMinutes(ServiceTime));
+            Schedule(() => EnWarehouse(car), TimeSpan.FromMinutes(Uniform.Sample(DefaultRS, PathLow, PathUp)));
+
+            Console.WriteLine($"车{car.carId}进入路径，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
+
         }
 
         /// <summary>
         /// 进入仓库
         /// </summary>
-        void EnWarehouse()
+        void EnWarehouse(Car car)
         {
             // 路径人数-1
-            NumberInPath--;
+            CarsInPath.Remove(car);
             // 仓库人数+1
-            NumberInWarehouse++;
+            CarsInWarehouse.Add(car);
 
-            // 更新仿真时钟
-            double ServiceTime = O2DESNet.Distributions.Exponential.Sample(DefaultRS, WarehouseServiceRate);
-            SimulationClock += ServiceTime * 60;
             // 触发下一个事件：离开仓库
-            Schedule(() => DeWareHouse(), TimeSpan.FromMinutes(ServiceTime));
+            Schedule(() => DeWareHouse(car), TimeSpan.FromMinutes(Exponential.Sample(DefaultRS, WarehouseServiceInterval)));
+
+            Console.WriteLine($"车{car.carId}进入仓库，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
 
         }
 
         /// <summary>
         /// 离开仓库
         /// </summary>
-        void DeWareHouse()
+        void DeWareHouse(Car car)
         {
             // 仓库人数-1
-            NumberInWarehouse--;
+            CarsInWarehouse.Remove(car);
             // 若停车场有车等待，则触发进入事件
             if (NumberInParking > 0)
             {
-                Schedule(() => EnPath(), TimeSpan.Zero);
+                Schedule(() => EnPath(CarsInParking.First()), TimeSpan.Zero);
             }
+            Console.WriteLine($"车{car.carId}离开仓库，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
+
         }
 
 
@@ -208,22 +199,16 @@ namespace warehouse_parking
         {
             // 初始化
             // 静态变量
-            ArrivalRate = 6;
+            ArrivalInterval = 6;
             PathLow = 3;
             PathUp = 5;
-            WarehouseServiceRate = 2;
+            WarehouseServiceInterval = 2;
             ParkingCapacity = 10;
             PathCapacity = 1;
             WarehouseCapacity = 1;
-            WaitingSeconds = new List<double>();
-            ArrivalSeconds = new List<double>();
 
-            // 动态变量无需初始化，不定义默认为0
-            // 更新仿真时钟
-            double ServiceTime = O2DESNet.Distributions.Exponential.Sample(DefaultRS, ArrivalRate);
-            SimulationClock += ServiceTime * 60;
             // 开始仿真
-            Schedule(() => Generate(), TimeSpan.FromMinutes(ServiceTime));
+            Schedule(() => Generate(new Car()), TimeSpan.FromMinutes(Exponential.Sample(DefaultRS, ArrivalInterval)));
         }
         }
     }
