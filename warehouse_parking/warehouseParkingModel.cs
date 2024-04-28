@@ -118,7 +118,7 @@ namespace warehouse_parking
             // 触发下一个事件：尝试进入路径
             Schedule(() => AttempEnPath(car), TimeSpan.Zero);
 
-            Console.WriteLine($"车{car.carId}进入停车场，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
+            Console.WriteLine($"{ClockTime} 车{car.carId}进入停车场，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
         }
 
         /// <summary>
@@ -153,7 +153,7 @@ namespace warehouse_parking
             // 触发下一个事件：进入仓库
             Schedule(() => EnWarehouse(car), TimeSpan.FromMinutes(Uniform.Sample(DefaultRS, PathLow, PathUp)));
 
-            Console.WriteLine($"车{car.carId}进入路径，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
+            Console.WriteLine($"{ClockTime} 车{car.carId}进入路径，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
 
         }
 
@@ -170,7 +170,7 @@ namespace warehouse_parking
             // 触发下一个事件：离开仓库
             Schedule(() => DeWareHouse(car), TimeSpan.FromMinutes(Exponential.Sample(DefaultRS, WarehouseServiceInterval)));
 
-            Console.WriteLine($"车{car.carId}进入仓库，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
+            Console.WriteLine($"{ClockTime} 车{car.carId}进入仓库，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
 
         }
 
@@ -186,7 +186,7 @@ namespace warehouse_parking
             {
                 Schedule(() => EnPath(CarsInParking.First()), TimeSpan.Zero);
             }
-            Console.WriteLine($"车{car.carId}离开仓库，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
+            Console.WriteLine($"{ClockTime} 车{car.carId}离开仓库，停车场数量：{NumberInParking}，路径数量：{NumberInPath}，仓库数量：{NumberInWarehouse}");
 
         }
 
